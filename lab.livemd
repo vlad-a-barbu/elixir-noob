@@ -1,0 +1,82 @@
+# Elixir noob lab
+
+## Section
+
+```elixir
+defmodule Sieve do
+  def seed(pid, n) do
+    receive do
+      :tick -> send(pid, n)
+    end
+    seed(pid, n + 1)
+  end
+
+  def filter(pid) do
+    receive do
+      prime -> filter_loop(pid, prime)
+    end
+  end
+  
+  def filter_loop(pid, prime) do
+    receive do
+      n -> if Integer.mod(n, prime) != 0 do send(pid, n) end
+    end
+    filter_loop(pid, prime)
+  end
+
+  def nth(n, pid, []) when n > 1 do
+    nth(n - 1, pid, [spawn_link(fn -> filter(pid) end)])
+  end
+
+  def nth(1, pid, []) do
+    send(pid, 2)
+    :ok
+  end
+
+  def nth(n, pid, [hd | tl]) when n > 1 do
+    nth(n - 1, pid, [(spawn_link(fn -> filter(hd) end)), hd | tl])
+  end
+
+  def nth(1, _, [hd | _]) do
+    { :tick, spawn_link(fn -> seed(hd, 2) end) }
+  end
+
+  def result(pid_caller) do
+    receive do
+      pid_tick -> result(pid_tick, pid_caller)
+    end
+  end
+  
+  def result(pid_tick, pid_caller) do
+    receive do
+      :stop -> exit(:normal)
+      x -> send(pid_caller, x)
+    after
+      1 -> send(pid_tick, :tick)
+    end
+    result(pid_tick, pid_caller)
+  end
+end
+
+defmodule Primes do
+  def nth(1) do
+    2
+  end
+  
+  def nth(n) do
+    pid_current = self()
+    pid_result = spawn_link(fn -> Sieve.result(pid_current) end)
+    { :tick, pid_tick } = Sieve.nth(n, pid_result, [])
+    send(pid_result, pid_tick)
+    receive do
+      x -> 
+        send(pid_result, :stop)
+        x
+    end
+  end
+end
+```
+
+```elixir
+Primes.nth(100)
+```
